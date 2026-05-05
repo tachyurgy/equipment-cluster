@@ -29,6 +29,9 @@ venv/
 .b2_migration_state.json
 /tmp_migration/
 
+# --- Claude Code session metadata ---
+.claude/
+
 # --- Binary media (URLs in JSON are fine; binaries are not) ---
 *.jpg
 *.jpeg

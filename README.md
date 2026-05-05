@@ -153,9 +153,10 @@ End-to-end pipeline time on an M-series MacBook (MPS): roughly 25 minutes for
 all 40 units, dominated by image download from the source CDN — the actual
 DINOv2 forward pass is a few seconds per unit.
 
-The **public demo** ships a curated 2-unit subset (~2,100 photos, 138 clusters)
+The **public demo** ships a curated 2-unit subset (2,088 photos, 138 clusters)
 mirrored to a Backblaze B2 bucket so the live site has no dependency on the
-client's infrastructure.
+client's infrastructure. A GitHub Actions cron re-mints the 7-day B2 download
+authorization tokens every 6 days and pushes the fresh signed URLs.
 
 ## Tech stack
 
