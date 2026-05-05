@@ -34,8 +34,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-from urllib.parse import urlparse
-
 import requests
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -105,7 +103,8 @@ class B2:
             self._upload_locals.url, self._upload_locals.token = self._get_upload_url()
         return self._upload_locals.url, self._upload_locals.token
 
-    def upload(self, key: str, body: bytes, content_type: str) -> str:
+    def upload(self, key: str, body: bytes, content_type: str) -> None:
+        """Upload bytes under `key`. Idempotent — re-uploads overwrite by name."""
         sha1 = hashlib.sha1(body).hexdigest()
         for attempt in range(4):
             url, token = self._thread_upload_url(force=(attempt > 0))
@@ -123,7 +122,7 @@ class B2:
                     timeout=60,
                 )
                 if r.status_code == 200:
-                    return self.public_url(key)
+                    return
                 if r.status_code in (401, 408, 429, 500, 503):
                     time.sleep(1.5 * (attempt + 1))
                     continue
@@ -132,18 +131,16 @@ class B2:
                 time.sleep(1.5 * (attempt + 1))
         raise RuntimeError(f"upload failed for {key}")
 
-    def public_url(self, key: str) -> str:
-        # Friendly URL — works for allPublic buckets.
-        return f"{self.download_url}/file/{self.bucket_name}/{key}"
-
 
 # ── URL handling ──────────────────────────────────────────────────────────────
 
 def url_to_key(u: str) -> str:
-    """Map S3 path to a stable B2 key. Preserves the transactions/.../snapshot_images
-    structure so it's still browsable."""
-    p = urlparse(u).path.lstrip("/")
-    return p
+    """Hash the source URL into an opaque B2 key. Drops the client's
+    transaction/photo IDs and path structure so the migrated URLs reveal
+    nothing about the origin. Deterministic — same source URL always maps
+    to the same key, so reruns are idempotent."""
+    h = hashlib.sha256(u.encode()).hexdigest()
+    return f"img/{h[:2]}/{h[2:4]}/{h}"
 
 
 @dataclass
@@ -180,19 +177,35 @@ def collect_urls() -> list[str]:
 # ── Migration ─────────────────────────────────────────────────────────────────
 
 def fetch_one(session: requests.Session, url: str) -> tuple[bytes, str] | tuple[None, str]:
-    """HEAD + GET. Returns (body, content_type) on success, (None, reason) on failure."""
-    try:
-        h = session.head(url, timeout=15, allow_redirects=True)
-        if h.status_code != 200:
-            return None, f"head_{h.status_code}"
-        if "ARCHIVE" in (h.headers.get("x-amz-storage-class", "") or ""):
-            return None, "glacier"
-        g = session.get(url, timeout=60)
-        if g.status_code != 200:
-            return None, f"get_{g.status_code}"
-        return g.content, g.headers.get("Content-Type", "application/octet-stream")
-    except requests.RequestException as e:
-        return None, f"net_{type(e).__name__}"
+    """Single GET with backoff. Glacier returns 403 InvalidObjectState on direct
+    GET (permanent — body contains InvalidObjectState). A bare 403 from S3 with
+    no such body is throttling/SlowDown — retry with exponential backoff. 5xx
+    and 429 are also retried."""
+    last_info = "unknown"
+    for attempt in range(6):
+        try:
+            g = session.get(url, timeout=120)
+            if g.status_code == 200:
+                return g.content, g.headers.get("Content-Type", "application/octet-stream")
+            # Permanent failures — distinguish by S3 error body so we don't waste
+            # backoff cycles on objects that will never be reachable.
+            head = g.content[:400]
+            if g.status_code == 403 and b"InvalidObjectState" in head:
+                return None, "glacier"
+            if g.status_code == 403 and b"AccessDenied" in head:
+                return None, "access_denied"   # private ACL — permanent
+            if g.status_code == 404:
+                return None, "get_404"
+            # Transient — back off and retry. SlowDown is the real throttle signal.
+            last_info = f"get_{g.status_code}"
+            if g.status_code in (429, 500, 502, 503, 504) or b"SlowDown" in head:
+                time.sleep(min(60, 2 ** attempt) + (attempt * 0.5))
+                continue
+            return None, last_info
+        except requests.RequestException as e:
+            last_info = f"net_{type(e).__name__}"
+            time.sleep(min(60, 2 ** attempt))
+    return None, last_info
 
 
 def migrate(args) -> None:
@@ -224,6 +237,10 @@ def migrate(args) -> None:
         if s is None:
             s = requests.Session()
             s.headers["User-Agent"] = "equipment-cluster-migrate/1.0"
+            # urllib3 default pool is 10 — too small for hot loops with many workers
+            adapter = requests.adapters.HTTPAdapter(pool_connections=64, pool_maxsize=64)
+            s.mount("https://", adapter)
+            s.mount("http://", adapter)
             tlocal.s = s
         return s
 
@@ -234,15 +251,16 @@ def migrate(args) -> None:
                 state.dead[url] = info
                 counters["dead"] += 1
             return
+        key = url_to_key(url)
         try:
-            b2_url = b2.upload(url_to_key(url), body, info)
+            b2.upload(key, body, info)
         except Exception as e:                                  # noqa: BLE001
             with state_lock:
                 state.dead[url] = f"upload_{type(e).__name__}"
                 counters["err"] += 1
             return
         with state_lock:
-            state.done[url] = b2_url
+            state.done[url] = key
             counters["ok"] += 1
             counters["bytes"] += len(body)
 

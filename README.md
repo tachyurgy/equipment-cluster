@@ -138,6 +138,8 @@ A small, fast React app (Vite, no UI library, ~150 kB JS):
 
 ## Scale and stats
 
+The full pipeline ran across the client's complete fleet:
+
 |                          |        |
 |--------------------------|--------|
 | Units processed          | 40     |
@@ -150,6 +152,10 @@ A small, fast React app (Vite, no UI library, ~150 kB JS):
 End-to-end pipeline time on an M-series MacBook (MPS): roughly 25 minutes for
 all 40 units, dominated by image download from the source CDN — the actual
 DINOv2 forward pass is a few seconds per unit.
+
+The **public demo** ships a curated 2-unit subset (~2,100 photos, 138 clusters)
+mirrored to a Backblaze B2 bucket so the live site has no dependency on the
+client's infrastructure.
 
 ## Tech stack
 
@@ -223,11 +229,13 @@ created_at}}}` and everything downstream works.
 - **Resumable migration.** The migration writes a state file every 10 s and
   on shutdown. If it dies, restarting picks up exactly where it left off —
   no double-uploads, no missed files.
-- **Glacier handling.** A non-trivial slice of the source S3 objects are in
-  Glacier Deep Archive. The migration HEAD-checks every URL first, classifies
-  archived/missing objects as "dead", and the rewrite step drops those
-  photos from the layouts (and recomputes cluster centroids) so the viewer
-  never shows a broken image.
+- **Dead-photo handling.** A non-trivial slice of the source S3 objects are
+  unreachable — Glacier Deep Archive (returns `403 InvalidObjectState` on a
+  GET), private ACLs (`403 AccessDenied`), or 404s. The migration script
+  classifies each by inspecting the S3 error body, and the rewrite step drops
+  those photos from the layouts (and recomputes cluster centroids) so the
+  viewer never shows a broken image. A single GET per URL doubles as the
+  reachability check — no separate HEAD round trip.
 
 ## Where else this approach fits
 

@@ -1,0 +1,43 @@
+name: Refresh B2 download tokens
+
+# Re-mints 7-day download authorization tokens for the private B2 bucket
+# and commits the freshly signed URLs into the layout JSONs. The push to
+# main triggers deploy.yml, which rebuilds and republishes Pages.
+#
+# Required repo secrets:
+#   B2_KEY_ID  B2_KEY  B2_BUCKET
+
+on:
+  schedule:
+    - cron: '0 6 */6 * *'    # every 6 days at 06:00 UTC — comfortably under the 7-day TTL
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install requests
+      - env:
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_KEY:    ${{ secrets.B2_KEY }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+        run: python3 scripts/rewrite_layouts.py
+      - run: |
+          if git diff --quiet app/public/data/layouts; then
+            echo "no changes — token refresh would have been a no-op, skipping commit"
+            exit 0
+          fi
+          git config user.name  'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add app/public/data/layouts
+          git commit -m "Refresh B2 download tokens (auto)"
+          git push
