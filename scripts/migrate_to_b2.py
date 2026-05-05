@@ -104,9 +104,12 @@ class B2:
         return self._upload_locals.url, self._upload_locals.token
 
     def upload(self, key: str, body: bytes, content_type: str) -> None:
-        """Upload bytes under `key`. Idempotent — re-uploads overwrite by name."""
+        """Upload bytes under `key`. Idempotent — re-uploads overwrite by name.
+        Refreshes the upload URL on every retry (B2 docs: a single upload URL
+        is sticky to one pod, so transient failures often mean that pod is
+        unhealthy and a fresh URL is required)."""
         sha1 = hashlib.sha1(body).hexdigest()
-        for attempt in range(4):
+        for attempt in range(7):
             url, token = self._thread_upload_url(force=(attempt > 0))
             try:
                 r = requests.post(
@@ -119,16 +122,16 @@ class B2:
                         "X-Bz-Content-Sha1": sha1,
                     },
                     data=body,
-                    timeout=60,
+                    timeout=120,
                 )
                 if r.status_code == 200:
                     return
-                if r.status_code in (401, 408, 429, 500, 503):
-                    time.sleep(1.5 * (attempt + 1))
+                if r.status_code in (401, 408, 429, 500, 502, 503, 504):
+                    time.sleep(min(30, 2 ** attempt))
                     continue
                 r.raise_for_status()
             except requests.RequestException:
-                time.sleep(1.5 * (attempt + 1))
+                time.sleep(min(30, 2 ** attempt))
         raise RuntimeError(f"upload failed for {key}")
 
 
@@ -254,9 +257,10 @@ def migrate(args) -> None:
         key = url_to_key(url)
         try:
             b2.upload(key, body, info)
-        except Exception as e:                                  # noqa: BLE001
+        except Exception:                                       # noqa: BLE001
+            # Don't poison the dead set — leave the URL pending so a re-run
+            # picks it up. B2 upload errors are almost always transient.
             with state_lock:
-                state.dead[url] = f"upload_{type(e).__name__}"
                 counters["err"] += 1
             return
         with state_lock:
