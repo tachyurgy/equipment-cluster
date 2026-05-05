@@ -1,0 +1,53 @@
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #080a10;
+  --surface:   #0d1018;
+  --surface2:  #131720;
+  --border:    #1e2334;
+  --border2:   #2a3050;
+  --text:      #e8eaf2;
+  --muted:     #4e5672;
+  --muted2:    #7b85a8;
+  --accent:    #3b82f6;
+  --accent-glow: rgba(59, 130, 246, 0.25);
+  --hover-bg:  #161c2d;
+  --cell-size: 90px;
+  --cell-h:    68px;
+  --label-w:   190px;
+  --scan: rgba(255,255,255,0.015);
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', sans-serif;
+  font-size: 13px;
+}
+
+/* Subtle scanline texture on top-level bg */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    var(--scan) 2px,
+    var(--scan) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+@keyframes fadein {
+  from { opacity: 0; transform: scale(0.98); }
+  to   { opacity: 1; transform: scale(1); }
+}

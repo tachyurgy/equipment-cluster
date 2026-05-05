@@ -1,0 +1,55 @@
+# --- Secrets ---
+backblaze*
+*.key
+*.secret
+.env
+.env.*
+
+# --- Local archive (work-in-progress / iteration history kept locally) ---
+archive/
+
+# --- Heavy artifacts (regeneratable from embed.py) ---
+data/embeddings/
+
+# --- Node / Vite ---
+node_modules/
+app/dist/
+app/.vite/
+*.log
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# --- Migration manifests / temp ---
+.b2_migration_state.json
+/tmp_migration/
+
+# --- Binary media (URLs in JSON are fine; binaries are not) ---
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.avif
+*.bmp
+*.tiff
+*.tif
+*.svg
+*.ico
+*.heic
+*.heif
+*.raw
+*.mp4
+*.mov
+
+# Allow specific committed assets in app/public if needed
+!app/public/**/*.svg
+
+# --- OS ---
+.DS_Store
+Thumbs.db

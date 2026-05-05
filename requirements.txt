@@ -1,0 +1,15 @@
+# DL backbone
+torch
+timm
+
+# Cross-modal labeling
+open_clip_torch
+
+# Manifold + clustering
+umap-learn
+scikit-learn
+
+# Numerics + IO
+numpy
+Pillow
+requests

@@ -1,0 +1,84 @@
+.viewer {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Header ── */
+.header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  background: linear-gradient(180deg, rgba(59,130,246,0.04) 0%, transparent 100%);
+  position: relative;
+}
+
+/* Bottom glow line */
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 20px; right: 20px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--accent), transparent);
+  opacity: 0.3;
+}
+
+.unitId {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.3px;
+}
+
+.sep {
+  font-size: 10px;
+  color: var(--border2);
+}
+
+.meta {
+  font-size: 11px;
+  color: var(--muted2);
+}
+
+.content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.timelineWrap {
+  position: relative;
+  height: 100%;
+}
+
+/* Big fixed back pill — impossible to miss */
+.backPill {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  z-index: 20;
+  background: rgba(10, 12, 20, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  color: var(--text);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 18px;
+  letter-spacing: 0.2px;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, color 0.15s;
+  white-space: nowrap;
+}
+
+.backPill:hover {
+  background: rgba(59, 130, 246, 0.2);
+  border-color: var(--accent);
+  color: var(--accent);
+  box-shadow: 0 0 16px var(--accent-glow);
+}

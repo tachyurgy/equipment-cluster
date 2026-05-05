@@ -1,0 +1,93 @@
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 10px;
+  padding: 16px;
+  overflow-y: auto;
+  height: 100%;
+  align-content: start;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border2) transparent;
+}
+
+/* Bulletproof 4:3 aspect ratio via padding-bottom trick */
+.cardOuter {
+  position: relative;
+  padding-bottom: 75%; /* 3/4 = 75% → 4:3 ratio */
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  background: var(--surface2);
+  transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+.cardOuter:hover {
+  border-color: var(--c, var(--accent));
+  box-shadow: 0 0 20px color-mix(in srgb, var(--c, var(--accent)) 15%, transparent);
+}
+
+/* Glow bar on top edge */
+.cardOuter::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: var(--c, var(--accent));
+  opacity: 0;
+  transition: opacity 0.18s;
+  z-index: 3;
+}
+.cardOuter:hover::before { opacity: 1; }
+
+/* Everything inside is absolutely positioned */
+.thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: filter 0.25s;
+  filter: brightness(0.88) saturate(0.9);
+}
+.cardOuter:hover .thumb {
+  filter: brightness(1) saturate(1.05);
+}
+
+.noPhoto {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+}
+
+/* Hover info — gradient + stats, only on hover */
+.hoverOverlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(8,10,16,0.75) 0%, transparent 50%);
+  display: flex;
+  align-items: flex-end;
+  padding: 10px;
+  opacity: 0;
+  transition: opacity 0.18s;
+  z-index: 2;
+  pointer-events: none;
+}
+.cardOuter:hover .hoverOverlay { opacity: 1; }
+
+.hoverInfo { display: flex; flex-direction: column; gap: 2px; }
+.hoverCount { font-size: 12px; font-weight: 700; color: #fff; }
+.hoverDates { font-size: 10px; color: rgba(255,255,255,0.55); }
+
+/* Color dot */
+.colorDot {
+  position: absolute;
+  top: 8px; right: 8px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--c, var(--accent));
+  box-shadow: 0 0 6px var(--c, var(--accent));
+  z-index: 3;
+  animation: pulse-glow 2.5s ease-in-out infinite;
+}
