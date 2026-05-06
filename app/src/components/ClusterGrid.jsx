@@ -77,7 +77,7 @@ export default function ClusterGrid({ layout, onSelectCluster }) {
 
   return (
     <div className={styles.grid}>
-      {cards.map(({ cluster, photos, mostRecent, oldest }) => (
+      {cards.map(({ cluster, photos, mostRecent, oldest }, cardIdx) => (
         <button
           key={cluster.id}
           className={styles.cardOuter}
@@ -89,7 +89,9 @@ export default function ClusterGrid({ layout, onSelectCluster }) {
               src={mostRecent.thumbnail_url}
               alt=""
               className={styles.thumb}
-              loading="lazy"
+              loading={cardIdx < 24 ? 'eager' : 'lazy'}
+              fetchpriority={cardIdx < 8 ? 'high' : 'auto'}
+              decoding="async"
             />
           ) : (
             <div className={styles.noPhoto} />

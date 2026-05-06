@@ -120,6 +120,7 @@ function Cell({ photos, color, onOpen }) {
         src={main.thumbnail_url}
         alt=""
         loading="lazy"
+        decoding="async"
         className={styles.thumb}
         draggable={false}
       />

@@ -45,7 +45,7 @@ export default function Lightbox({ photos, startIndex, onClose }) {
           )}
           <img
             key={photo.id}
-            src={photo.thumbnail_url}
+            src={photo.url}
             alt=""
             className={styles.img}
           />
