@@ -17,7 +17,10 @@ B2 download-authorization tokens are valid for at most 7 days
 (`validDurationInSeconds=604800`). This script must be re-run before then —
 a GitHub Actions cron in .github/workflows/refresh-tokens.yml automates it.
 
-Idempotent: run as often as you like; each run mints fresh tokens.
+Idempotent: run as often as you like; each run mints a fresh token and
+re-signs whatever keys the layouts already hold. The first run migrates
+original source URLs via url_map; every run after that re-signs the B2 URLs
+in place (url_map is only consulted for URLs not yet pointing at the bucket).
 """
 
 from __future__ import annotations
@@ -76,6 +79,34 @@ def signed_url(download_url: str, bucket: str, key: str, token: str) -> str:
     return f"{download_url}/file/{bucket}/{key}?Authorization={token}"
 
 
+def b2_key_from_url(url: str | None, bucket: str) -> str | None:
+    """If `url` already points at our B2 bucket, return its object key
+    (stripping any stale ?Authorization=…). Otherwise return None.
+
+    This is what makes the refresh idempotent against already-migrated
+    layouts: once a layout holds B2 URLs, every run just re-signs the keys
+    in place with a fresh token instead of looking them up in url_map —
+    which is keyed by the *original* source URLs and would miss every one,
+    silently dropping the entire demo."""
+    marker = f"/file/{bucket}/"
+    if not url or marker not in url:
+        return None
+    return url.split(marker, 1)[1].split("?", 1)[0]
+
+
+def resolve_key(url: str | None, bucket: str, url_map: dict[str, str]) -> str | None:
+    """Object key for a photo URL, or None if it should be dropped.
+
+    Already-migrated B2 URL  → re-sign in place (steady-state / cron path).
+    Original source URL      → look up in url_map (first-time migration);
+                               "dead" or unknown ⇒ drop."""
+    existing = b2_key_from_url(url, bucket)
+    if existing is not None:
+        return existing
+    mapped = url_map.get(url)
+    return None if mapped in (None, "dead") else mapped
+
+
 # ── Layout rewrite ────────────────────────────────────────────────────────────
 
 def main() -> None:
@@ -101,9 +132,9 @@ def main() -> None:
 
         kept: list[dict] = []
         for p in photos:
-            full_key = url_map.get(p.get("url"))
-            tn_key   = url_map.get(p.get("thumbnail_url"))
-            if full_key in (None, "dead") or tn_key in (None, "dead"):
+            full_key = resolve_key(p.get("url"), bucket, url_map)
+            tn_key   = resolve_key(p.get("thumbnail_url"), bucket, url_map)
+            if full_key is None or tn_key is None:
                 dropped += 1
                 continue
             p["url"]           = signed_url(download_url, bucket, full_key, token)
