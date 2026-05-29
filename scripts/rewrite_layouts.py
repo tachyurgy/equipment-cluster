@@ -1,106 +1,65 @@
 #!/usr/bin/env python3
 """
-Rewrite app/public/data/layouts/*.json so every photo URL points at the
-private B2 bucket via a signed (download-authorized) URL. Photos whose
-source object was unreachable (Glacier / 404) are dropped, and cluster
-centroids/counts are recomputed from the survivors.
+Rewrite app/public/data/layouts/*.json so every photo URL is a clean,
+public, token-free URL into the B2 bucket. Photos whose source object was
+unreachable (Glacier / 404) are dropped, and cluster centroids/counts are
+recomputed from the survivors.
+
+The bucket is public (allPublic), so there is no download-authorization
+token, no 7-day TTL, no refresh cron, and no credentials required — the URLs
+never expire. (This replaced an earlier signed-URL design whose tokens kept
+expiring and silently breaking the live demo.)
 
 Inputs:
   scripts/url_map.json     — produced by migrate_to_b2.py
                              {source_url: b2_key | "dead"}
-  app/public/data/layouts  — original layouts (modified in place)
+  app/public/data/layouts  — layouts, modified in place
 
-Environment:
-  B2_KEY_ID, B2_KEY, B2_BUCKET — same credentials as migrate_to_b2.py
+Environment (both optional, defaults match the live bucket):
+  B2_BUCKET        bucket name              (default: equipment-cluster-portfolio)
+  B2_DOWNLOAD_URL  region download host     (default: https://f004.backblazeb2.com)
 
-B2 download-authorization tokens are valid for at most 7 days
-(`validDurationInSeconds=604800`). This script must be re-run before then —
-a GitHub Actions cron in .github/workflows/refresh-tokens.yml automates it.
-
-Idempotent: run as often as you like; each run mints a fresh token and
-re-signs whatever keys the layouts already hold. The first run migrates
-original source URLs via url_map; every run after that re-signs the B2 URLs
-in place (url_map is only consulted for URLs not yet pointing at the bucket).
+Idempotent: run as often as you like. Already-public B2 URLs are normalised
+(any leftover ?Authorization=… is stripped); original source URLs are mapped
+to public B2 URLs via url_map; dead/unknown photos are dropped.
 """
 
 from __future__ import annotations
 
 import json
 import os
-import sys
 from pathlib import Path
-
-import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 LAYOUTS_DIR = ROOT / "app" / "public" / "data" / "layouts"
 URL_MAP_PATH = ROOT / "scripts" / "url_map.json"
 
-PREFIX = "img/"                 # everything under this gets a single auth token
-TOKEN_TTL_SECONDS = 7 * 24 * 3600  # B2 max
+BUCKET = os.environ.get("B2_BUCKET", "equipment-cluster-portfolio")
+DOWNLOAD_URL = os.environ.get("B2_DOWNLOAD_URL", "https://f004.backblazeb2.com").rstrip("/")
 
 
-# ── B2 download-auth ──────────────────────────────────────────────────────────
+# ── URL helpers ───────────────────────────────────────────────────────────────
 
-def get_download_auth(key_id: str, key: str, bucket: str) -> tuple[str, str, str]:
-    """Returns (download_url, bucket_name, auth_token).
-    The token is valid for any file under PREFIX for TOKEN_TTL_SECONDS."""
-    auth = requests.get(
-        "https://api.backblazeb2.com/b2api/v3/b2_authorize_account",
-        auth=(key_id, key), timeout=20,
-    ).json()
-    api_url = auth["apiInfo"]["storageApi"]["apiUrl"]
-    download_url = auth["apiInfo"]["storageApi"]["downloadUrl"]
-    account_token = auth["authorizationToken"]
-    account_id = auth["accountId"]
-
-    bucket_resp = requests.post(
-        f"{api_url}/b2api/v3/b2_list_buckets",
-        headers={"Authorization": account_token},
-        json={"accountId": account_id, "bucketName": bucket},
-        timeout=20,
-    ).json()
-    bucket_id = bucket_resp["buckets"][0]["bucketId"]
-
-    auth_resp = requests.post(
-        f"{api_url}/b2api/v3/b2_get_download_authorization",
-        headers={"Authorization": account_token},
-        json={
-            "bucketId": bucket_id,
-            "fileNamePrefix": PREFIX,
-            "validDurationInSeconds": TOKEN_TTL_SECONDS,
-        },
-        timeout=20,
-    ).json()
-    return download_url, bucket, auth_resp["authorizationToken"]
+def public_url(key: str) -> str:
+    return f"{DOWNLOAD_URL}/file/{BUCKET}/{key}"
 
 
-def signed_url(download_url: str, bucket: str, key: str, token: str) -> str:
-    return f"{download_url}/file/{bucket}/{key}?Authorization={token}"
-
-
-def b2_key_from_url(url: str | None, bucket: str) -> str | None:
+def b2_key_from_url(url: str | None) -> str | None:
     """If `url` already points at our B2 bucket, return its object key
-    (stripping any stale ?Authorization=…). Otherwise return None.
-
-    This is what makes the refresh idempotent against already-migrated
-    layouts: once a layout holds B2 URLs, every run just re-signs the keys
-    in place with a fresh token instead of looking them up in url_map —
-    which is keyed by the *original* source URLs and would miss every one,
-    silently dropping the entire demo."""
-    marker = f"/file/{bucket}/"
+    (stripping any leftover ?Authorization=…). Otherwise return None."""
+    marker = f"/file/{BUCKET}/"
     if not url or marker not in url:
         return None
     return url.split(marker, 1)[1].split("?", 1)[0]
 
 
-def resolve_key(url: str | None, bucket: str, url_map: dict[str, str]) -> str | None:
+def resolve_key(url: str | None, url_map: dict[str, str]) -> str | None:
     """Object key for a photo URL, or None if it should be dropped.
 
-    Already-migrated B2 URL  → re-sign in place (steady-state / cron path).
+    Already-migrated B2 URL  → reuse its key (strip any token; steady state).
     Original source URL      → look up in url_map (first-time migration);
                                "dead" or unknown ⇒ drop."""
-    existing = b2_key_from_url(url, bucket)
+    existing = b2_key_from_url(url)
     if existing is not None:
         return existing
     mapped = url_map.get(url)
@@ -113,16 +72,8 @@ def main() -> None:
     if not URL_MAP_PATH.exists():
         raise SystemExit(f"missing {URL_MAP_PATH} — run migrate_to_b2.py first")
 
-    for k in ("B2_KEY_ID", "B2_KEY", "B2_BUCKET"):
-        if not os.environ.get(k):
-            print(f"missing env var {k}", file=sys.stderr)
-            sys.exit(1)
-
     url_map: dict[str, str] = json.loads(URL_MAP_PATH.read_text())
-    download_url, bucket, token = get_download_auth(
-        os.environ["B2_KEY_ID"], os.environ["B2_KEY"], os.environ["B2_BUCKET"]
-    )
-    print(f"minted download token for {bucket} (valid 7 days)")
+    print(f"writing public URLs for {BUCKET} at {DOWNLOAD_URL} (no token, no expiry)")
 
     rewritten = dropped = layouts_touched = 0
 
@@ -132,13 +83,13 @@ def main() -> None:
 
         kept: list[dict] = []
         for p in photos:
-            full_key = resolve_key(p.get("url"), bucket, url_map)
-            tn_key   = resolve_key(p.get("thumbnail_url"), bucket, url_map)
+            full_key = resolve_key(p.get("url"), url_map)
+            tn_key   = resolve_key(p.get("thumbnail_url"), url_map)
             if full_key is None or tn_key is None:
                 dropped += 1
                 continue
-            p["url"]           = signed_url(download_url, bucket, full_key, token)
-            p["thumbnail_url"] = signed_url(download_url, bucket, tn_key, token)
+            p["url"]           = public_url(full_key)
+            p["thumbnail_url"] = public_url(tn_key)
             kept.append(p)
             rewritten += 1
 

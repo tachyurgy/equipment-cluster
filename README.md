@@ -154,9 +154,9 @@ all 40 units, dominated by image download from the source CDN — the actual
 DINOv2 forward pass is a few seconds per unit.
 
 The **public demo** ships a curated 2-unit subset (2,088 photos, 138 clusters)
-mirrored to a Backblaze B2 bucket so the live site has no dependency on the
-client's infrastructure. A GitHub Actions cron re-mints the 7-day B2 download
-authorization tokens every 6 days and pushes the fresh signed URLs.
+mirrored to a public Backblaze B2 bucket so the live site has no dependency on
+the client's infrastructure. The image URLs are plain public B2 URLs — no
+signing, no expiry, nothing to refresh.
 
 ## Tech stack
 
