@@ -12,38 +12,46 @@ function fmtFull(str) {
   return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
-const PRELOAD_CONCURRENCY = 5
+// Browsers cap ~6 concurrent connections per host (all photos are on the same
+// B2 host), so 6 in-flight saturates the pipe; the rest queue automatically.
+const PRELOAD_CONCURRENCY = 6
 
 export default function ClusterTimeline({ cluster, photos }) {
   const [idx, setIdx] = useState(photos.length - 1)
-  const [imgLoaded, setImgLoaded] = useState(false)
+  const [loaded, setLoaded] = useState(() => new Set())
 
   const photo = photos[idx]
+  const isLoaded = photo ? loaded.has(photo.url) : false
 
-  // Once the initial image is loaded, preload the rest newest-first with 5 concurrent downloads.
+  const markLoaded = useCallback((url) => {
+    setLoaded(prev => {
+      if (prev.has(url)) return prev
+      const n = new Set(prev)
+      n.add(url)
+      return n
+    })
+  }, [])
+
+  // Eagerly download EVERY full-res photo for this angle the moment it opens,
+  // newest-first (the direction the user clicks). Once cached, navigating shows
+  // full-res instantly with no thumbnail flash. Runs once per cluster.
   useEffect(() => {
-    if (!imgLoaded) return
     let active = true
-
-    const initialUrl = photos[photos.length - 1]?.url
-    const rest = [...photos].reverse().map(p => p.url).filter(u => u !== initialUrl)
+    const urls = [...photos].reverse().map(p => p.url)
     let ptr = 0
 
-    function next() {
-      if (!active || ptr >= rest.length) return
-      const url = rest[ptr++]
+    function pump() {
+      if (!active || ptr >= urls.length) return
+      const url = urls[ptr++]
       const img = new Image()
-      img.onload = img.onerror = next
+      img.onload = img.onerror = () => { if (active) { markLoaded(url); pump() } }
       img.src = url
     }
 
-    for (let i = 0; i < Math.min(PRELOAD_CONCURRENCY, rest.length); i++) next()
+    for (let i = 0; i < Math.min(PRELOAD_CONCURRENCY, urls.length); i++) pump()
 
     return () => { active = false }
-  }, [imgLoaded, photos])
-
-  // Reset load state when photo changes
-  useEffect(() => { setImgLoaded(false) }, [idx])
+  }, [photos, markLoaded])
 
   const prev = useCallback(() => setIdx(i => Math.max(0, i - 1)), [])
   const next = useCallback(() => setIdx(i => Math.min(photos.length - 1, i + 1)), [photos.length])
@@ -69,21 +77,23 @@ export default function ClusterTimeline({ cluster, photos }) {
         <div className={styles.photoWrap}>
           {photo && (
             <>
-              {/* Thumbnail shows instantly (44KB) as a soft placeholder; the
-                  full-res image fades in on top once it has downloaded. */}
-              <img
-                key={`thumb-${photo.id}`}
-                src={photo.thumbnail_url}
-                alt=""
-                className={styles.mainImgThumb}
-                aria-hidden="true"
-              />
+              {/* Thumbnail placeholder only while the full-res isn't cached yet.
+                  Once preloaded, we skip it entirely so there's no thumbnail flash. */}
+              {!isLoaded && (
+                <img
+                  key={`thumb-${photo.id}`}
+                  src={photo.thumbnail_url}
+                  alt=""
+                  className={styles.mainImgThumb}
+                  aria-hidden="true"
+                />
+              )}
               <img
                 key={photo.id}
                 src={photo.url}
                 alt=""
-                className={`${styles.mainImg} ${imgLoaded ? styles.mainImgLoaded : ''}`}
-                onLoad={() => setImgLoaded(true)}
+                className={`${styles.mainImg} ${isLoaded ? styles.mainImgLoaded : ''}`}
+                onLoad={() => markLoaded(photo.url)}
               />
             </>
           )}
