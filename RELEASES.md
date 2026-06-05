@@ -3,6 +3,12 @@
 Release history for the visual-history viewer at https://tachyurgy.github.io/equipment-cluster/
 (GitHub Pages, built from `app/` by `.github/workflows/deploy.yml` on every push to `main`).
 
+## 2026-06-05 — Eager-load full-res on drilldown (no thumbnail flash)
+- **What deployed:** https://tachyurgy.github.io/equipment-cluster/ — bundle `index-BotCqL9z.js`. Deploy run `27042083272` green; live bundle verified.
+- **Changed:** opening an angle now immediately downloads **every** full-res photo for that angle (newest-first, 6 concurrent = per-host cap) instead of waiting for the first paint then trickling 5 at a time. Loaded URLs tracked in a Set — the blurred thumbnail placeholder only renders while a photo's full-res isn't cached, and cached photos render at full opacity instantly. Clicking through an angle's history now shows full-res instantly with no thumbnail flash.
+- **How:** edit `app/src/components/ClusterTimeline.jsx`, `npm run build`, `git push origin main` (commit `dac20a0`).
+- **Verified:** local Playwright run — all 11 full-res of a sample angle downloaded right after open; 0 thumbnail-placeholder frames across 8 rapid arrow-key navigations. Live bundle hash matches build.
+
 ## 2026-06-05 — Fix collapsed/overlapping grid, lighten load, angle-first framing
 - **What deployed:** https://tachyurgy.github.io/equipment-cluster/ — new bundle `index-DqerLIIo.js`. Pages deploy run `27041526803` green.
 - **Changed:**
