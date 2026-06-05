@@ -68,13 +68,24 @@ export default function ClusterTimeline({ cluster, photos }) {
 
         <div className={styles.photoWrap}>
           {photo && (
-            <img
-              key={photo.id}
-              src={photo.url}
-              alt=""
-              className={`${styles.mainImg} ${imgLoaded ? styles.mainImgLoaded : ''}`}
-              onLoad={() => setImgLoaded(true)}
-            />
+            <>
+              {/* Thumbnail shows instantly (44KB) as a soft placeholder; the
+                  full-res image fades in on top once it has downloaded. */}
+              <img
+                key={`thumb-${photo.id}`}
+                src={photo.thumbnail_url}
+                alt=""
+                className={styles.mainImgThumb}
+                aria-hidden="true"
+              />
+              <img
+                key={photo.id}
+                src={photo.url}
+                alt=""
+                className={`${styles.mainImg} ${imgLoaded ? styles.mainImgLoaded : ''}`}
+                onLoad={() => setImgLoaded(true)}
+              />
+            </>
           )}
         </div>
 

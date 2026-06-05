@@ -1,6 +1,11 @@
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  /* Explicit row height. `auto` rows size to intrinsic content, and neither
+     aspect-ratio nor %-padding contributes to intrinsic height — so the rows
+     collapsed (~20px) and the cards overlapped. A fixed row height the cards
+     fill with object-fit:cover is bulletproof. */
+  grid-auto-rows: 190px;
   gap: 14px;
   padding: 18px;
   overflow-y: auto;
@@ -14,7 +19,7 @@
   position: relative;
   display: block;
   width: 100%;
-  aspect-ratio: 4 / 3;
+  height: 100%;          /* fill the fixed grid-auto-rows track */
   padding: 0;
   border-radius: 8px;
   overflow: hidden;
@@ -22,6 +27,12 @@
   cursor: pointer;
   background: var(--surface2);
   transition: border-color 0.18s, box-shadow 0.18s;
+}
+
+/* Fills the card; the image + overlays position against it. */
+.ratio {
+  position: absolute;
+  inset: 0;
 }
 
 .cardOuter:hover {
@@ -42,7 +53,6 @@
 }
 .cardOuter:hover::before { opacity: 1; }
 
-/* Everything inside is absolutely positioned */
 .thumb {
   position: absolute;
   inset: 0;
@@ -52,6 +62,7 @@
   display: block;
   transition: filter 0.25s;
   filter: brightness(0.88) saturate(0.9);
+  background: var(--surface2);
 }
 .cardOuter:hover .thumb {
   filter: brightness(1) saturate(1.05);

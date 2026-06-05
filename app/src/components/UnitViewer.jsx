@@ -14,11 +14,9 @@ export default function UnitViewer({ layout }) {
       <div className={styles.header}>
         <span className={styles.unitId}>Unit #{layout.unit_id}</span>
         <span className={styles.sep}>·</span>
-        <span className={styles.meta}>{layout.photo_count} photos</span>
+        <span className={styles.metaStrong}>{realClusters.length} angles</span>
         <span className={styles.sep}>·</span>
-        <span className={styles.meta}>{layout.transaction_count} inspections</span>
-        <span className={styles.sep}>·</span>
-        <span className={styles.meta}>{realClusters.length} angles</span>
+        <span className={styles.meta}>{layout.photo_count} photos across {layout.transaction_count} inspections</span>
         {layout.date_range?.start && (
           <>
             <span className={styles.sep}>·</span>

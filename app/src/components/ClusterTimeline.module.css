@@ -39,6 +39,19 @@
   z-index: 1;
 }
 
+/* Low-res placeholder shown instantly behind the full-res image */
+.mainImgThumb {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  filter: blur(6px);
+  transform: scale(1.015);
+  z-index: 0;
+}
+
 .mainImgLoaded {
   opacity: 1;
   animation: fadein 0.35s ease both;

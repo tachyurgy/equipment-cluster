@@ -48,7 +48,7 @@ export default function App() {
             >
               <span className={styles.unitId}>#{u.id}</span>
               <span className={styles.unitMeta}>
-                {u.transaction_count} inspections
+                {Math.max(0, (u.cluster_count ?? 1) - 1)} angles · {u.transaction_count} inspections
                 {u.date_range?.start && (
                   <span className={styles.dateRange}>
                     {' '}· {u.date_range.start.split(',')[0]} – {u.date_range.end.split(',')[0]}

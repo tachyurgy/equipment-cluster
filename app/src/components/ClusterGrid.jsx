@@ -1,4 +1,4 @@
-import { useMemo, useEffect } from 'react'
+import { useMemo } from 'react'
 import styles from './ClusterGrid.module.css'
 
 function parseDate(str) {
@@ -16,42 +16,13 @@ function fmtShort(str) {
   return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
 }
 
-const THUMB_CONCURRENCY = 6
-
 export default function ClusterGrid({ layout, onSelectCluster }) {
   const { photos, clusters } = layout
 
-  // Preload all thumbnails + the cover full-res for each cluster
-  useEffect(() => {
-    let active = true
-
-    function makeQueue(urls, concurrency) {
-      let ptr = 0
-      function next() {
-        if (!active || ptr >= urls.length) return
-        const img = new Image()
-        img.onload = img.onerror = next
-        img.src = urls[ptr++]
-      }
-      for (let i = 0; i < Math.min(concurrency, urls.length); i++) next()
-    }
-
-    // All thumbnails — 6 concurrent
-    makeQueue(photos.map(p => p.thumbnail_url), THUMB_CONCURRENCY)
-
-    // Full-res cover image (most recent) for each cluster — 2 concurrent so
-    // they don't fight with thumbnails but are ready when user drills in
-    const coverUrls = clusters
-      .filter(c => c.id !== -1)
-      .map(c => {
-        const clusterPhotos = photos.filter(p => p.cluster === c.id)
-        return clusterPhotos[clusterPhotos.length - 1]?.url
-      })
-      .filter(Boolean)
-    makeQueue(coverUrls, 2)
-
-    return () => { active = false }
-  }, [photos, clusters])
+  // No JS preloading: each card's <img> handles its own loading natively
+  // (eager for the first rows, lazy below the fold). The old effect eagerly
+  // pulled all 576 thumbnails + 36 full-res covers (~30MB) on mount, which is
+  // what made the grid take forever to become usable.
 
   const cards = useMemo(() => {
     // Sort by UMAP centroid position so visually similar angles appear adjacent.
@@ -84,29 +55,31 @@ export default function ClusterGrid({ layout, onSelectCluster }) {
           style={{ '--c': cluster.color }}
           onClick={() => onSelectCluster({ cluster, photos })}
         >
-          {mostRecent ? (
-            <img
-              src={mostRecent.thumbnail_url}
-              alt=""
-              className={styles.thumb}
-              loading={cardIdx < 24 ? 'eager' : 'lazy'}
-              fetchpriority={cardIdx < 8 ? 'high' : 'auto'}
-              decoding="async"
-            />
-          ) : (
-            <div className={styles.noPhoto} />
-          )}
+          <div className={styles.ratio}>
+            {mostRecent ? (
+              <img
+                src={mostRecent.thumbnail_url}
+                alt=""
+                className={styles.thumb}
+                loading={cardIdx < 24 ? 'eager' : 'lazy'}
+                fetchpriority={cardIdx < 8 ? 'high' : 'auto'}
+                decoding="async"
+              />
+            ) : (
+              <div className={styles.noPhoto} />
+            )}
 
-          <div className={styles.colorDot} />
+            <div className={styles.colorDot} />
 
-          <div className={styles.hoverOverlay}>
-            <div className={styles.hoverInfo}>
-              <span className={styles.hoverCount}>{photos.length} photos</span>
-              {oldest && mostRecent && oldest.id !== mostRecent.id && (
-                <span className={styles.hoverDates}>
-                  {fmtShort(oldest.created_at)} – {fmtShort(mostRecent.created_at)}
-                </span>
-              )}
+            <div className={styles.hoverOverlay}>
+              <div className={styles.hoverInfo}>
+                <span className={styles.hoverCount}>{photos.length} photos</span>
+                {oldest && mostRecent && oldest.id !== mostRecent.id && (
+                  <span className={styles.hoverDates}>
+                    {fmtShort(oldest.created_at)} – {fmtShort(mostRecent.created_at)}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </button>
